@@ -23,6 +23,14 @@ Usage of permissions:
     	Gitlab token
 ```
 
+## Available automation
+### permissions : Audit permissions for all subgroups and projects of a group
+When using Gitlab SaaS in an organization, it is useful to check the list of accesses to the projects regularly.
+
+The ```permissions``` sub-command allows to list the all users who have access to a specific group and all subgroups and projects.
+
+This command is typically used to audit the users with accesses on the group of the organization.
+
 ## Build
 
 There is a Makefile to build. By default, the resulting binary is being placed in the ```build``` directory.
