@@ -18,7 +18,7 @@ By requesting the command without arguments, the command is self-explanatory:
 ```
 Usage of permissions:
   -gid string
-    	Gitlab group id to check
+    	Gitlab group id
   -token string
     	Gitlab token
 ```
