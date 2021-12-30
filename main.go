@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"gitlab-automation/modules/gitlabpermissions"
+	"gitlab-automation/modules/permissions"
 	"os"
 )
 
@@ -24,7 +24,7 @@ func main() {
 		case "help":
 			commandHelp()
 		case "permissions":
-			gitlabpermissions.CommandGitlabPermissions()
+			permissions.CommandPermissions()
 		default:
 			unknownCommand(args[1])
 		}

@@ -1,4 +1,4 @@
-package gitlabpermissions
+package permissions
 
 import (
 	"flag"
@@ -14,17 +14,10 @@ type arguments struct {
 	gid   int
 }
 
-type user struct {
-	id       int
-	username string
-	name     string
-	groups   map[int]int
-	projects map[int]int
-}
-
-func CommandGitlabPermissions() {
+// CommandPermissions start the subcommand "permissions" based on arguments received by the program.
+// Stop the program in case of error.
+func CommandPermissions() {
 	args, err := extractArgs()
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,9 +30,8 @@ func CommandGitlabPermissions() {
 
 func extractArgs() (args arguments, err error) {
 	flagSet := flag.NewFlagSet("permissions", flag.ContinueOnError)
-
 	myToken := flagSet.String("token", "", "Gitlab token")
-	myGID := flagSet.String("gid", "", "Gitlab group id to check")
+	myGID := flagSet.String("gid", "", "Gitlab group id")
 
 	err = flagSet.Parse(os.Args[2:])
 	if err != nil {
@@ -60,64 +52,70 @@ func extractArgs() (args arguments, err error) {
 	}
 
 	args.gid, err = strconv.Atoi(*myGID)
-
 	return
 }
 
 func process(args arguments) (err error) {
 	users := make(map[int]user)
-	projectsDict := make(map[int]string)
-	groupsDict := make(map[int]string)
 
+	// Create new gitlab REST client
 	git, err := gitlab.NewClient(args.token)
 	if err != nil {
 		return err
 	}
 
-	err = processGroup(args.gid, git, users, projectsDict, groupsDict)
+	// Process the group recursively
+	err = processGroup(args.gid, git, users)
 	if err != nil {
 		return err
 	}
 
-	for _, iUser := range users {
-		fmt.Printf("%v (ID: %v) has access to:\n", iUser.username, iUser.id)
-		for _, iGroup := range iUser.groups {
-			fmt.Printf(" - group %v (ID: %v)\n", groupsDict[iGroup], iGroup)
+	// Show the results
+	for _, itMember := range users {
+		fmt.Printf("%v (ID: %v) has access to:\n", itMember.username, itMember.id)
+		for itGroup := range itMember.groupsID {
+			fmt.Printf(" - group %v (ID: %v)\n", groupsDict[itGroup].name, itGroup)
 		}
-		for _, iProject := range iUser.projects {
-			fmt.Printf(" - project %v (ID: %v)\n", projectsDict[iProject], iProject)
+		for itProject := range itMember.projectsID {
+			fmt.Printf(" - project %v (ID: %v)\n", projectsDict[itProject].name, itProject)
 		}
 	}
 
 	return nil
 }
 
-func processGroup(gid int, git *gitlab.Client, users map[int]user, projectsDict map[int]string, groupsDict map[int]string) error {
+func processGroup(gid int, git *gitlab.Client, users map[int]user) error {
+	// Get details about the current group
 	group, _, err := git.Groups.GetGroup(gid, &gitlab.GetGroupOptions{})
 	if err != nil {
 		return err
 	}
 
-	groupsDict[group.ID] = group.Name
+	// Add details in the dictionary to avoid multiple calls to the API
+	addGroupDictEntry(group)
 
+	// Store group's members
 	err = considerGroupMembers(gid, git, users)
 	if err != nil {
 		return err
 	}
 
 	for _, project := range group.Projects {
-		projectsDict[project.ID] = project.Name
-
+		// Add details in the dictionary
+		addProjectDictEntry(project)
+		// Store project's members
 		err = considerProjectMembers(project.ID, git, users)
 		if err != nil {
 			return err
 		}
 	}
 
+	// List subgroups
 	subgroups, _, err := git.Groups.ListSubgroups(gid, &gitlab.ListSubgroupsOptions{})
 
+	// Process subgroups recursively
 	for _, subgroup := range subgroups {
-		err = processGroup(subgroup.ID, git, users, projectsDict, groupsDict)
+		err = processGroup(subgroup.ID, git, users)
 		if err != nil {
 			return err
 		}
@@ -133,20 +131,13 @@ func considerProjectMembers(pid int, git *gitlab.Client, users map[int]user) err
 	}
 
 	for _, projectMember := range projectMembers {
-		// Check the existence of the member in the list
-		_, ok := users[projectMember.ID]
-		if !ok {
-			users[projectMember.ID] = user{
-				id:       projectMember.ID,
-				username: projectMember.Username,
-				name:     projectMember.Name,
-				groups:   make(map[int]int),
-				projects: make(map[int]int),
-			}
+		// Check the existence of the member in the list, add it if not found
+		if _, found := users[projectMember.ID]; !found {
+			users[projectMember.ID] = newUserFromProject(*projectMember)
 		}
 
 		// Store the info of the current group
-		users[projectMember.ID].projects[pid] = pid
+		users[projectMember.ID].projectsID[pid] = true
 	}
 
 	return nil
@@ -159,20 +150,13 @@ func considerGroupMembers(gid int, git *gitlab.Client, users map[int]user) error
 	}
 
 	for _, groupMember := range groupMembers {
-		// Check the existence of the member in the list
-		_, ok := users[groupMember.ID]
-		if !ok {
-			users[groupMember.ID] = user{
-				id:       groupMember.ID,
-				username: groupMember.Username,
-				name:     groupMember.Name,
-				groups:   make(map[int]int),
-				projects: make(map[int]int),
-			}
+		// Check the existence of the member in the list, add it if not found
+		if _, found := users[groupMember.ID]; !found {
+			users[groupMember.ID] = newUserFromGroup(*groupMember)
 		}
 
 		// Store the info of the current group
-		users[groupMember.ID].groups[gid] = gid
+		users[groupMember.ID].groupsID[gid] = true
 	}
 
 	return nil
