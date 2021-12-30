@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 )
 
 type arguments struct {
@@ -64,11 +65,16 @@ func process(args arguments) (err error) {
 		return err
 	}
 
+	fmt.Print("Permissions audit in progress...")
+
 	// Process the group recursively
 	err = processGroup(args.gid, git, users)
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("")
+	fmt.Printf("Permissions audit on %v\n", time.Now().Format("2006-01-02"))
 
 	// Show the results
 	for _, itMember := range users {
@@ -81,10 +87,14 @@ func process(args arguments) (err error) {
 		}
 	}
 
+	fmt.Println("END")
+
 	return nil
 }
 
 func processGroup(gid int, git *gitlab.Client, users map[int]user) error {
+	fmt.Print(".")
+
 	// Get details about the current group
 	group, _, err := git.Groups.GetGroup(gid, &gitlab.GetGroupOptions{})
 	if err != nil {
